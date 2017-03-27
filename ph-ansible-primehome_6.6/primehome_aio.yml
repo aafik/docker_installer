@@ -1,7 +1,0 @@
----
-- hosts: primehome
-  #accelerate: true
-  remote_user: ansible
- # gather_facts: true
-  roles:
-      - primehome_aio

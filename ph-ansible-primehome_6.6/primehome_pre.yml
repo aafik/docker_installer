@@ -1,6 +1,0 @@
----
-- hosts: primehome
-  remote_user: ansible
-  gather_facts: true
-  roles:
-      - primehome_prerequisites
