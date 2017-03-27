@@ -1,0 +1,8 @@
+---
+- hosts: primehome
+  #accelerate: true
+  #strategy: debug
+  remote_user: ansible
+ # gather_facts: true
+  roles:
+      - primehome_install

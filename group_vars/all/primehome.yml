@@ -1,0 +1,28 @@
+##the below parameter should be used only if servers have no access to internet 
+
+## state true if you want to use docker local images
+primehome_local: false
+### where package will be copy on the remote host
+primehome_install_directory: /usr/local/install
+####where package located in anisble server
+primehome_source_directory: /root/install
+
+
+### don't change
+consul_package: consul.tar
+primehome_docker_sl_package: sl.tar
+primehome_docker_cl_package: cl.tar
+primehome_docker_nginx-sl_package: nginx-sl.tar
+primehome_docker_nginx-cl_package: ngin-cl.tar
+primehome_docker_configuration_package: configuration-{{primehome_customer}}.tar
+primehome_docker_liquidbase_package: liquidbase.tar
+primehome_docker_activemq_package: activemq.tar
+
+##############docker
+consul_nic: ens192
+primehome_build: 201
+primehome_home: /home/ansible/docker/
+primehome_remove_mount: false
+primehome_customer: att
+consul_add: ph-ds-nnaamat-1.cisco.com
+
