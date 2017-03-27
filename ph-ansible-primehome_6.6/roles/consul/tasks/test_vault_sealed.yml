@@ -1,0 +1,12 @@
+---     
+  - name: test if vault seald
+    shell: /opt/cisco/consul/bin/check-vault-status.sh | grep ':true,'
+    register: command_result
+    failed_when: command_result.rc > 1
+    changed_when: no
+  - name: restart valut if it is sealed
+    command: su panorama /opt/cisco/consul/init/vault restart
+    when:
+      - command_result.rc == 0
+      - stat_result.stat.exists == True
+

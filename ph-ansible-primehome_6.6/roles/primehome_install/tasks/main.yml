@@ -1,0 +1,195 @@
+---
+- name: remove {{primehome_home}}
+  file: path={{primehome_home}} state=absent
+  when:
+   - "{{primehome_remove_mount}} == true"
+
+- name: remove {{primehome_home}}/vault/vault_token
+  file: path={{primehome_home}}/vault state=absent
+
+
+- name: create "{{primehome_home}}/var/log"
+  file: path="{{primehome_home}}/var/log" state=directory
+
+#- name: remove all containers
+#  shell: docker stop $(docker ps -a -q) && docker rm $(docker ps -a -q)
+#  ignore_errors: yes
+
+- name: stop and remove consul ,sl ,nginx ,cl and activemq containers
+  docker_container:
+    name: "{{item}}" 
+    state: absent
+  with_items:
+  - sl
+  - nginx-sl
+#  - consul
+  - cl
+  - activemq
+  - configuration
+  - db-manager
+  - nginx-cl
+
+#- name: creating consul container
+#  docker_container:
+#    name: consul
+#    dns_search_domains: cisco.com
+#    image: dockerhub.cisco.com/primehome-v2-docker/consul:b{{primehome_build}}
+#    state: started
+#    pull: true
+#    volumes:
+#    - "{{primehome_home}}/vault:/var/consul/vault/"
+#    - "{{primehome_home}}/central-config:/var/primehome_in"
+#    network_mode: host
+#    env:
+#     CONSUL_ARGS: "--datacenter=dc1 -server -bootstrap"
+#     CONSUL_ADVERTISE_ADDR: "{{hostvars[inventory_hostname]['ansible_' + consul_nic]['ipv4']['address']}}"
+#     CONSUL_DNS_PORT: 8610
+#     CONSUL_ADDR: "{hostvars[inventory_hostname]['ansible_' + consul_nic]['ipv4']['address']}}"
+#    capabilities:
+#    - IPC_LOCK
+
+#- pause:
+#   seconds: 20
+
+
+
+- name: creating configuration container
+  docker_container:
+    name: deploy
+    image: dockerhub.cisco.com/primehome-v2-docker/configuration-{{primehome_customer}}:b{{primehome_build}}
+    state: started
+    pull: true
+    volumes:
+    - "{{primehome_home}}:/deploy"
+    command: "common autodeploy liquibase"
+  delegate_to:  "{{ groups.SL[0] }}"
+  run_once: true
+
+
+- name: fetch consul key
+  command: docker exec  consul cat /var/consul/vault/vault_token
+  register: vault_token
+  delegate_to: "{{ groups.SL[0] }}"
+  run_once: true
+
+
+- debug: msg={{vault_token.stdout}}
+
+
+
+- name: creating db-manager container
+  docker_container:
+    name: db-manager
+    image: dockerhub.cisco.com/primehome-v2-docker/db-manager:b{{primehome_build}}
+    state: started
+    pull: true
+    volumes:
+    - "{{primehome_home}}/liquibase:/liquibase_folder"
+    - "{{primehome_home}}/liquibase/logs:/logs_volume"
+    network_mode: host
+    env:
+     LOG_LEVEL: "info"
+     CONSUL_IP: "{{hostvars[inventory_hostname]['ansible_' + consul_nic]['ipv4']['address']}}"
+     CUSTOMER: "{{primehome_customer}}"
+     MODE: "PROD"
+     TOKEN: "{{vault_token.stdout}}"
+     SILENT_MODE: "true"
+     COMMAND: "upgrade"
+  delegate_to: "{{ groups.SL[0] }}"
+  run_once: true 
+
+- name: activemq container
+  docker_container:
+    name: activemq
+    image: dockerhub.cisco.com/primehome-v2-docker/activemq:b{{primehome_build}}
+    state: started
+    pull: true
+    volumes:
+    - "{{primehome_home}}/vault:/root/vault"
+    network_mode: host
+    env:
+     CONSUL_DNS_PORT: 8621
+     CONSUL_ADDR:  "{{consul_add}}" #"{{hostvars[inventory_hostname]['ansible_' + consul_nic]['ipv4']['address']}}"
+     CONSUL_HTTP_PORT: 8511
+  when:
+   - "'{{ansible_nodename}}' in  groups['ACTIVEMQ']" 
+
+- name: creating sl container
+  docker_container:
+    name: sl
+    image: dockerhub.cisco.com/primehome-v2-docker/sl:b{{primehome_build}}
+    state: started
+    pull: true
+    volumes:
+    - "{{primehome_home}}/autodeploy:/opt/primehome/autodeploy"
+    - "{{primehome_home}}/ActiveCustomer:/opt/primehome/ActiveCustomer"
+    - "{{primehome_home}}/var/log:/opt/primehome/var/log"
+    - "{{primehome_home}}/var/log:/opt/primehome/portal/tomcat/logs"   
+    network_mode: host
+    env:
+     CONSUL_DNS_PORT: 8620
+     CONSUL_ADDR: "{{consul_add}}"
+     CONSUL_HTTP_PORT: 8510
+  when: 
+  - "'{{ansible_nodename}}' in  groups['SL']"
+
+
+- name: creating sl-nginx container
+  docker_container:
+    name: "nginx-sl"
+    image: dockerhub.cisco.com/primehome-v2-docker/nginx-sl:b{{primehome_build}}
+    state: started
+    pull: true
+    network_mode: host
+    env:
+     CONSUL_DNS_PORT: 8630
+     CONSUL_ADDR: "{{consul_add}}" #"{{hostvars[inventory_hostname]['ansible_' + consul_nic]['ipv4']['address']}}"
+     CONFIG_PATHS: "nginx-sl"
+     CONSUL_HTTP_PORT: 8520
+     CONSUL_ARGS: "-node={{inventory_hostname}}-nginx-sl"
+  when:
+  - "'{{ansible_nodename}}' in  groups['SL']"
+
+
+- name: creating cl container
+  docker_container:
+    name: "cl"
+    image: dockerhub.cisco.com/primehome-v2-docker/cl:b{{primehome_build}}
+    state: started
+    pull: true
+    volumes:
+    - "{{primehome_home}}/ActiveCustomer:/opt/primehome/ActiveCustomer"
+    - "{{primehome_home}}/var/log:/opt/primehome/var/log"
+    - "{{primehome_home}}/var/log:/opt/primehome/acs/logs"
+ 
+    network_mode: host
+    env:
+     CONSUL_DNS_PORT: 8641
+     CONSUL_ADDR: "{{consul_add}}"  ##"{{hostvars[inventory_hostname]['ansible_' + consul_nic]['ipv4']['address']}}"
+     CONSUL_HTTP_PORT: 8511
+  when:
+  - "'{{ansible_nodename}}' in  groups['CL']"
+
+
+- name: creating cl-nginx container
+  docker_container:
+    name: "nginx-cl"
+    image: dockerhub.cisco.com/primehome-v2-docker/nginx-cl:b{{primehome_build}}
+    state: started
+    pull: true
+
+    network_mode: host
+    env:
+     CONFIG_PATHS: "nginx-cl"
+     CONSUL_DNS_PORT: 53
+     CONSUL_ADDR: "{{consul_add}}" ##"{{hostvars[inventory_hostname]['ansible_' + consul_nic]['ipv4']['address']}}"
+     CONSUL_HTTP_PORT: 8500
+     CONSUL_ARGS: "-node={{inventory_hostname}}-nginx-cl" 
+  when:
+  - "'{{ansible_nodename}}' in  groups['CL']"
+
+
+
+
+
+
