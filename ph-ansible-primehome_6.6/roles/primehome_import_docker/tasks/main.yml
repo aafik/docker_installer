@@ -1,0 +1,27 @@
+---
+- name: copy and unarchive primehome docker package 
+  unarchive: src=/{{primehome_source_directory}}/{{primehome_package}} dest=/{{primehome_install_directory}}
+
+- name: import PrimeHome docker images
+  command: docker load {{primehome_install_directory}}/{{primehome_docker_liquidbase_package}} | docker import - liquidbase
+
+- name: import PrimeHome docker images
+  command: docker load {{primehome_install_directory}}/{{primehome_docker_activemq_package}} | docker import - activemq
+
+- name: import PrimeHome docker images
+  command: docker load {{primehome_install_directory}}/{{primehome_docker_configuration_package}} | docker import - configuration
+ 
+- name: import PrimeHome docker images
+  command: docker load {{primehome_install_directory}}/{{primehome_docker_sl_package}} | docker import - sl
+
+- name: import PrimeHome docker images
+  command: docker load {{primehome_install_directory}}/{{primehome_docker_nginx-sl_package}} | docker import - nginx-sl
+
+- name: import PrimeHome docker images
+  command: docker load {{primehome_install_directory}}/{{primehome_docker_cl_package}} | docker import - cl
+
+- name: import PrimeHome docker images
+  command: docker load {{primehome_install_directory}}/{{primehome_docker_nginx-cl_package}} | docker import - ngnx-cl
+
+
+

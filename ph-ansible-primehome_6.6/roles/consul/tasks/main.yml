@@ -1,0 +1,91 @@
+---
+     - name: killing consul and vault
+       command: pkill -f consul_server
+       register: command_result
+       failed_when: "'FAILED' in command_result.stderr"
+     - command: pkill -f vault
+       register: command_result
+       failed_when: "'FAILED' in command_result.stderr"
+     - command: pkill -f register-daemon
+       register: command_result
+       failed_when: "'FAILED' in command_result.stderr"
+     - command: pkill -9 consul-template
+       register: command_result
+       failed_when: "'FAILED' in command_result.stderr"
+
+      
+     - name: delete a directory
+       file:  path={{consul_home}}/consul state=absent 
+       with_fileglob:
+         - /{{consul_home}}/consul* 
+     
+     
+     - name: check if install dir exist
+       file: path={{install_directory}} state=directory mode=0755
+
+     #- name: copying file to remote host
+     - copy: src=/{{source_directory}}/{{consul_package}} dest={{install_directory}}/{{consul_package}} owner=root group=root mode=0644 ##force=no
+
+     - file: path=/{{install_directory}}/consul  state=directory mode=0755
+
+     - file: path=/{{install_directory}}/consul/install.conf  state=absent ##state=directory mode=0755
+
+     - name: untar file
+       unarchive: src={{install_directory}}/{{consul_package}} dest={{install_directory}}/consul  copy=no #remote_src=yes
+
+   ##make sure consul home exsist
+     - file: path={{consul_home}} state=directory mode=0755
+     - lineinfile: dest=/{{install_directory}}/consul/install.conf  regexp="^consul_key" insertafter="^#consul_key " line="consul_key={{consul_key}}"
+     - replace: dest={{install_directory}}/consul/install.conf regexp='primehome_user=primehome' replace='primehome_user={{ primehome_user }}'
+     - name: set ip from command      
+       replace: dest={{install_directory}}/consul/install.conf regexp='interface=0.0.0.0' replace='interface={{hostvars[ansible_hostname]['ansible_' + consul_backend_nic]['ipv4']['address']}}'
+   ##configuring consul home
+     - replace: dest={{install_directory}}/consul/install.conf regexp='install_folder=/opt/cisco' replace='install_folder={{consul_home}}'
+   ##insert consul ip addresses
+     - name: configure consul ip adresses
+       lineinfile: dest=/{{install_directory}}/consul/install.conf  regexp="^consul_servers" insertafter="^#consul_servers " line="consul_servers={{Hosts}}"
+   ## remove directory if exsist
+     - file: path={{consul_home}}/consul state=absent
+     
+    ## - mame: installing consul
+     - command: ./consul_install.sh -p={{ consul_ui_pass }}
+       become: true
+       args:
+         chdir: /{{install_directory}}/consul/
+  # - name: starting consul
+     - name: starting consul
+       command: su {{ primehome_user }} {{consul_home}}/consul/init/consul start
+     - stat:
+         path: /{{consul_home}}/consul/init/vault
+       register: stat_result
+ 
+     - name: start vault on node 1
+       command: su {{ primehome_user }} {{consul_home}}/consul/init/vault start
+       when:
+         - SL is defined
+         - "'{{ SL }}' | match('1')" 
+     - pause:
+         seconds: 60
+     - name: start vault
+       command: su {{ primehome_user }} {{consul_home}}/consul/init/vault start
+       when: stat_result.stat.exists == True
+
+     - command: su {{ primehome_user }} {{consul_home}}/consul/init/vault status
+       when: stat_result.stat.exists == True
+       register: vault_status
+       
+     - debug: msg="{{ vault_status.stdout }}"
+       when: stat_result.stat.exists == True
+       
+       
+     - command: su {{ primehome_user }} {{consul_home}}/consul/init/consul status
+       register: consul_status
+     - debug: msg="{{ consul_status.stdout }}"
+       
+     - pause:
+         minutes: 5
+
+
+  
+
+
